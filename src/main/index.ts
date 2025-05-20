@@ -1,28 +1,50 @@
 // src/main/index.ts
-import {app, BrowserWindow, globalShortcut} from "electron";
-import fs from "fs"; // 修改：直接使用 fs/promises 导入的 fs
+import { app, BrowserWindow, globalShortcut } from "electron";
+import fs from "fs";
 import path from "path";
-import {setAutoFreeze} from "immer";
-import {setupGlobalContext} from "@/shared/global-context/main";
-import {setupI18n} from "@/shared/i18n/main";
-import {handleDeepLink} from "./deep-link";
+import os from 'os'; // <--- 导入 os 模块
+import { setAutoFreeze } from "immer";
+import { setupGlobalContext } from "@/shared/global-context/main";
+import { setupI18n } from "@/shared/i18n/main";
+import { handleDeepLink } from "./deep-link";
 import logger from "@shared/logger/main";
-import {PlayerState} from "@/common/constant";
+import { PlayerState } from "@/common/constant";
 import ThumbBarUtil from "@/common/main/thumb-bar-util";
 import windowManager from "@main/window-manager";
 import AppConfig from "@shared/app-config/main";
 import TrayManager from "@main/tray-manager";
 import WindowDrag from "@shared/window-drag/main";
-import {IAppConfig} from "@/types/app-config";
+import { IAppConfig } from "@/types/app-config";
 import axios from "axios";
-import {HttpsProxyAgent} from "https-proxy-agent";
+import { HttpsProxyAgent } from "https-proxy-agent";
 import PluginManager from "@shared/plugin-manager/main";
 import ServiceManager from "@shared/service-manager/main";
 import utils from "@shared/utils/main";
 import messageBus from "@shared/message-bus/main";
 import shortCut from "@shared/short-cut/main";
 import voidCallback from "@/common/void-callback";
-import mpvManager from "./mpv-manager"; // 新增
+import mpvManager from "./mpv-manager";
+
+// --- 设置自定义 User-Agent ---
+// 建议在 app 模块可用后立即设置，例如在 app.on('ready') 之前或之内尽早设置。
+// 为了确保尽早生效，可以放在顶层。
+try {
+    const appName = app.getName(); // 或者: require('../../../package.json').productName;
+    const appVersion = app.getVersion(); // 或者: require('../../../package.json').version;
+    const platformOS = os.type(); // 例如: 'Windows_NT', 'Darwin', 'Linux'
+    const osVersion = os.release(); // 操作系统内核版本
+    const arch = os.arch(); // 例如: 'x64', 'arm64'
+
+    const customUserAgent = `${appName}/${appVersion} (${platformOS} ${osVersion}; ${arch})`;
+    app.userAgentFallback = customUserAgent;
+    // 你可以通过在主进程中打印来验证
+    // logger.logInfo(`Custom User-Agent set to: ${app.userAgentFallback}`);
+    // 或者在后续的网络请求中检查
+} catch (error) {
+    logger.logError("Failed to set custom User-Agent:", error as Error);
+}
+// --- 结束 User-Agent 设置 ---
+
 
 // portable
 if (process.platform === "win32") {
@@ -99,6 +121,9 @@ app.on("will-quit", async () => { // 修改为 async
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and import them here.
 app.whenReady().then(async () => {
+    // 也可以在这里设置，但更早设置可能覆盖更多 Electron 内部的早期请求
+    // if (!app.userAgentFallback) { /* ... set it here ... */ }
+
     logger.logPerf("App Ready");
     setupGlobalContext();
     await AppConfig.setup(windowManager);
@@ -139,7 +164,7 @@ app.whenReady().then(async () => {
                         musicItem.title + (musicItem.artist ? ` - ${musicItem.artist}` : "")
                     );
                 } else {
-                    mainWindow.setTitle(app.name);
+                    mainWindow.setTitle(app.getName());
                 }
             }
         } else if ("playerState" in patch) {
